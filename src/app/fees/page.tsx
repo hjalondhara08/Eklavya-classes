@@ -1028,7 +1028,15 @@ export default function FeesPage() {
                           <div className="flex items-center justify-center gap-3">
                             <button
                               type="button"
-                              onClick={() => shareReceipt(p, [])}
+                              onClick={() => {
+                                // Compute the student's real totals from the full payments list so
+                                // the receipt shows Yearly / Paid / Pending (not ₹0).
+                                const sid = p.studentId?._id || p.studentId;
+                                const yf = p.studentId?.yearlyFees || ((p.studentId?.monthlyFee || 0) * 12) || 0;
+                                const studHist = payments.filter((x: any) => (x.studentId?._id || x.studentId) === sid);
+                                const tp = studHist.reduce((sum: number, x: any) => sum + (x.amount || 0), 0);
+                                shareReceipt(p, studHist, { yearlyFee: yf, totalPaid: tp, remaining: Math.max(0, yf - tp) });
+                              }}
                               className="p-1 text-slate-400 hover:text-[#25D366] hover:bg-green-50 rounded transition-all"
                               title="Send Receipt on WhatsApp"
                             >

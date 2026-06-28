@@ -14,71 +14,9 @@ import {
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatDate, formatMonthOnly, formatMonthNameOnly, parseDDMMYYYY, formatToDDMMYYYY } from '@/lib/utils/dates';
 import DatePickerInput from '@/components/ui/DatePickerInput';
-import { generatePagedPdf, PDF_PAGE_W, PDF_PAGE_H, PdfTextItem, PdfLineItem } from '@/lib/utils/pdf';
-
 type ReportTab = 'profit' | 'pending' | 'yearly-collection' | 'students';
 
 const STANDARDS = ['6', '7', '8', '9', '10', '11', '12'];
-
-// Builds a real, multi-page PDF of the pending-fees list. A downloadable file
-// is far more reliable than window.print() on phones (Android's web-print often
-// fails with "There was a problem printing the page").
-function buildPendingFeesPdf(students: any[], grandTotalDue: number, metaLine: string): Blob {
-  const LX = 36;
-  const RX = PDF_PAGE_W - 36;
-  const C = { idx: 36, name: 54, bb: 188, mob: 300, yearly: 372, paid: 442, pend: 508 };
-
-  const pages: Array<{ items: PdfTextItem[]; lines: PdfLineItem[] }> = [];
-  let items: PdfTextItem[] = [];
-  let lines: PdfLineItem[] = [];
-  let y = 0;
-
-  const flush = () => { if (items.length || lines.length) pages.push({ items, lines }); items = []; lines = []; };
-
-  const header = (first: boolean) => {
-    flush();
-    y = 40;
-    if (first) {
-      items.push({ text: 'EKLAVYA CLASSES', x: LX, y, size: 15, bold: true }); y += 18;
-      items.push({ text: 'Pending Fees / Dues List', x: LX, y, size: 11, bold: true }); y += 13;
-      items.push({ text: metaLine, x: LX, y, size: 8 }); y += 16;
-    } else {
-      items.push({ text: 'Pending Fees / Dues List (continued)', x: LX, y, size: 10, bold: true }); y += 16;
-    }
-    items.push({ text: '#', x: C.idx, y, size: 8, bold: true });
-    items.push({ text: 'Student', x: C.name, y, size: 8, bold: true });
-    items.push({ text: 'Branch / Batch', x: C.bb, y, size: 8, bold: true });
-    items.push({ text: 'Mobile', x: C.mob, y, size: 8, bold: true });
-    items.push({ text: 'Yearly', x: C.yearly, y, size: 8, bold: true });
-    items.push({ text: 'Paid', x: C.paid, y, size: 8, bold: true });
-    items.push({ text: 'Pending', x: C.pend, y, size: 8, bold: true });
-    y += 4;
-    lines.push({ x1: LX, y1: y, x2: RX, y2: y, width: 0.6 });
-    y += 12;
-  };
-
-  header(true);
-  students.forEach((s, i) => {
-    if (y > PDF_PAGE_H - 50) header(false);
-    items.push({ text: String(i + 1), x: C.idx, y, size: 8 });
-    items.push({ text: String(s.name || '').slice(0, 24), x: C.name, y, size: 8 });
-    items.push({ text: (String(s.branchName || '') + (s.batchName ? ' / ' + s.batchName : '')).slice(0, 22), x: C.bb, y, size: 7 });
-    items.push({ text: String(s.mobileNumber || s.parentMobile || '-').slice(0, 12), x: C.mob, y, size: 7 });
-    items.push({ text: formatCurrency(s.yearlyFees), x: C.yearly, y, size: 7 });
-    items.push({ text: formatCurrency(s.totalPaidAmount), x: C.paid, y, size: 7 });
-    items.push({ text: formatCurrency(s.pendingAmount), x: C.pend, y, size: 8, bold: true });
-    y += 13;
-  });
-
-  if (y > PDF_PAGE_H - 40) header(false);
-  y += 6;
-  lines.push({ x1: LX, y1: y - 10, x2: RX, y2: y - 10, width: 0.8 });
-  items.push({ text: 'Grand Total Outstanding:', x: C.bb, y, size: 9, bold: true });
-  items.push({ text: formatCurrency(grandTotalDue || 0), x: C.pend, y, size: 9, bold: true });
-  flush();
-
-  return generatePagedPdf(pages);
-}
 
 function getAcademicEndYear() {
   const today = new Date();
@@ -194,51 +132,17 @@ export default function ReportsPage() {
     );
   }
 
-  const handlePrint = async () => {
-    // For the pending list, generate a real downloadable PDF and open it. A PDF file
-    // opens in the phone's PDF viewer (reliable print/save), unlike window.print()
-    // which fails on mobile ("There was a problem printing the page").
-    if (activeTab === 'pending' && data && Array.isArray(data.students)) {
-      const branchLabel = selectedBranch ? (branches.find(b => b._id === selectedBranch)?.name || 'Branch') : 'All Branches';
-      const metaLine = [
-        branchLabel,
-        selectedStandard ? `Std ${selectedStandard}` : '',
-        debouncedSearch ? `Search: "${debouncedSearch}"` : '',
-        `${data.students.length} student(s) with dues`,
-        `Generated: ${formatDate(new Date())}`,
-      ].filter(Boolean).join('  -  ');
-
-      let blob: Blob;
-      try {
-        blob = buildPendingFeesPdf(data.students, data.grandTotalDue || 0, metaLine);
-      } catch (err) {
-        window.print();
-        return;
-      }
-
-      const file = new File([blob], 'Pending_Fees_List.pdf', { type: 'application/pdf' });
-      const nav: any = typeof navigator !== 'undefined' ? navigator : null;
-
-      // Mobile: native share sheet (Save to Files / WhatsApp / etc.) — reliable on phones.
-      if (nav?.canShare && nav.canShare({ files: [file] })) {
-        try {
-          await nav.share({ files: [file], title: 'Pending Fees List' });
-          return;
-        } catch (err: any) {
-          if (err && err.name === 'AbortError') return; // user cancelled
-          // otherwise fall through to download
-        }
-      }
-
-      // Desktop / unsupported: download the PDF file directly.
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'Pending_Fees_List.pdf';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+  const handlePrint = () => {
+    // For the pending list, hit the server endpoint that returns the PDF as a real
+    // download (Content-Disposition: attachment). This is reliable on every device —
+    // mobile blob/share/window.print() approaches fail on many phone browsers.
+    if (activeTab === 'pending') {
+      const params = new URLSearchParams();
+      if (selectedBranch) params.set('branchId', selectedBranch);
+      if (selectedBatch) params.set('batchId', selectedBatch);
+      if (selectedStandard) params.set('standard', selectedStandard);
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      window.location.href = `/api/fees/pending-pdf?${params.toString()}`;
       return;
     }
     window.print();

@@ -722,74 +722,11 @@ export default function DashboardPage() {
     }
   };
 
-  // Format PDF print for pending list
-  const handlePrintDefaulters = (batch: any, students: any[]) => {
-    const pendingStudents = students.filter(s => !s.isPaid);
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const htmlContent = `
-      <html>
-        <head>
-          <title>Defaulters List - ${batch.name}</title>
-          <style>
-            body { font-family: sans-serif; padding: 40px; color: #1e293b; }
-            h2 { color: #1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
-            .meta { font-size: 14px; color: #64748b; margin-bottom: 20px; line-height: 1.6; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #cbd5e1; padding: 12px; text-align: left; }
-            th { background-color: #f8fafc; font-weight: bold; }
-            .total { margin-top: 30px; font-weight: bold; font-size: 16px; text-align: right; }
-          </style>
-        </head>
-        <body>
-          <h2>Pending Fees Defaulters List</h2>
-          <div class="meta">
-            <strong>Branch:</strong> ${batch.branchName || '-'}<br/>
-            <strong>Batch:</strong> ${batch.name} (${batch.timing || 'N/A'})<br/>
-            <strong>Defaulter Students:</strong> ${pendingStudents.length}<br/>
-            <strong>Generated Date:</strong> ${formatDate(new Date())}
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Sr. No.</th>
-                <th>Student Name</th>
-                <th>Mobile</th>
-                <th>Standard</th>
-                <th>Yearly Fee</th>
-                <th>Paid Fee</th>
-                <th>Pending Fee</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${pendingStudents.map((s, index) => {
-                const mobileNum = s.mobileNumber || s.mobile || '';
-                return `
-                  <tr>
-                    <td>${index + 1}</td>
-                    <td>${s.name}</td>
-                    <td>${mobileNum ? `<a href="tel:${mobileNum}" style="color: #1e3a8a; text-decoration: none; font-weight: bold;">${mobileNum}</a>` : '-'}</td>
-                    <td>${s.standard}</td>
-                    <td>₹${s.yearlyExpected || 0}</td>
-                    <td>₹${s.yearlyPaid || 0}</td>
-                    <td>₹${s.yearlyPending || 0}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-          <div class="total">
-            Total Pending Deficit: ₹${pendingStudents.reduce((sum, s) => sum + (s.yearlyPending || 0), 0)}
-          </div>
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
-        </body>
-      </html>
-    `;
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+  // Pending defaulters list → server-generated PDF download (reliable on every
+  // device, unlike window.open()+window.print() which fails on mobile).
+  const handlePrintDefaulters = (batch: any, _students?: any[]) => {
+    if (!batch?.id) return;
+    window.location.href = `/api/fees/pending-pdf?batchId=${batch.id}`;
   };
 
   const monthsList = [

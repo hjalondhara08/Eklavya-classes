@@ -56,8 +56,8 @@ function buildContentStream(items: PdfTextItem[], lines: PdfLineItem[]): string 
   return content;
 }
 
-// Assembles a PDF (1+ pages) from already-built content streams and returns a Blob.
-function assemblePdf(contents: string[]): Blob {
+// Assembles a PDF (1+ pages) from already-built content streams and returns raw bytes.
+function assemblePdfBytes(contents: string[]): Uint8Array {
   const N = Math.max(1, contents.length);
   const fontF1Num = 3 + N * 2;
   const fontF2Num = 4 + N * 2;
@@ -92,15 +92,21 @@ function assemblePdf(contents: string[]): Blob {
 
   const bytes = new Uint8Array(pdf.length);
   for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xff;
-  return new Blob([bytes], { type: 'application/pdf' });
+  return bytes;
 }
 
-// Multi-page PDF: each entry is one page's text + line primitives.
-export function generatePagedPdf(pages: Array<{ items: PdfTextItem[]; lines?: PdfLineItem[] }>): Blob {
+// Multi-page PDF as raw bytes — usable on the server (API routes) where Blob is
+// not the natural response type.
+export function generatePagedPdfBytes(pages: Array<{ items: PdfTextItem[]; lines?: PdfLineItem[] }>): Uint8Array {
   const contents = (pages.length ? pages : [{ items: [], lines: [] }]).map(p =>
     buildContentStream(p.items, p.lines ?? [])
   );
-  return assemblePdf(contents);
+  return assemblePdfBytes(contents);
+}
+
+// Multi-page PDF as a Blob — for client-side download/share.
+export function generatePagedPdf(pages: Array<{ items: PdfTextItem[]; lines?: PdfLineItem[] }>): Blob {
+  return new Blob([generatePagedPdfBytes(pages) as unknown as BlobPart], { type: 'application/pdf' });
 }
 
 export function generateSimplePdf(items: PdfTextItem[], lines: PdfLineItem[] = []): Blob {
