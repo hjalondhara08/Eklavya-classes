@@ -142,7 +142,7 @@ export default function ReportsPage() {
       if (selectedBatch) params.set('batchId', selectedBatch);
       if (selectedStandard) params.set('standard', selectedStandard);
       if (debouncedSearch) params.set('search', debouncedSearch);
-      window.location.href = `/api/fees/pending-pdf?${params.toString()}`;
+      window.location.href = `/api/pending-pdf?${params.toString()}`;
       return;
     }
     window.print();

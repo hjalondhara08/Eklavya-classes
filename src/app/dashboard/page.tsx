@@ -726,7 +726,7 @@ export default function DashboardPage() {
   // device, unlike window.open()+window.print() which fails on mobile).
   const handlePrintDefaulters = (batch: any, _students?: any[]) => {
     if (!batch?.id) return;
-    window.location.href = `/api/fees/pending-pdf?batchId=${batch.id}`;
+    window.location.href = `/api/pending-pdf?batchId=${batch.id}`;
   };
 
   const monthsList = [
