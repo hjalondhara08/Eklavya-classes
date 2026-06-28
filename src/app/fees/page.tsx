@@ -109,7 +109,7 @@ function buildReceiptPdfBlob(payment: any, history: any[], totals?: ReceiptTotal
   y += 22;
 
   // ── Detail rows ──
-  const yearlyFee = totals?.yearlyFee ?? student.yearlyFees ?? ((student.monthlyFee || 0) * 12) ?? 0;
+  const yearlyFee = totals?.yearlyFee ?? student.yearlyFees ?? (student.monthlyFee || 0) * 12;
   const rows: Array<[string, string]> = [
     ['Receipt ID:', '#' + (payment._id ? payment._id.toString().slice(-8).toUpperCase() : '-')],
     ['Date:', formatDate(payment.transactionDate)],

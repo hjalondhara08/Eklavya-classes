@@ -322,6 +322,34 @@ export default function DashboardPage() {
     }
   }, [selectedStudentId, calendarYear, cachedStudents]);
 
+  const filteredHierarchy = useMemo(() => {
+    return hierarchy.map(branch => {
+      if (!batchSearchQuery.trim()) return branch;
+
+      const query = batchSearchQuery.toLowerCase();
+      
+      // A branch matches if the branch name matches the query,
+      // OR if any of its batches match the query.
+      const branchMatches = branch.name.toLowerCase().includes(query);
+      
+      const matchingBatches = (branch.batches || []).filter((batch: any) => 
+        batch.name.toLowerCase().includes(query) || 
+        (batch.timing && batch.timing.toLowerCase().includes(query)) ||
+        (batch.days && batch.days.toLowerCase().includes(query))
+      );
+
+      if (branchMatches) {
+        return branch;
+      } else if (matchingBatches.length > 0) {
+        return {
+          ...branch,
+          batches: matchingBatches
+        };
+      }
+      return null;
+    }).filter(Boolean);
+  }, [hierarchy, batchSearchQuery]);
+
   if (!session) return null;
 
   const role = session.user.role;
@@ -779,33 +807,6 @@ export default function DashboardPage() {
     { label: 'Dec', value: '12' }
   ];
 
-  const filteredHierarchy = useMemo(() => {
-    return hierarchy.map(branch => {
-      if (!batchSearchQuery.trim()) return branch;
-
-      const query = batchSearchQuery.toLowerCase();
-      
-      // A branch matches if the branch name matches the query,
-      // OR if any of its batches match the query.
-      const branchMatches = branch.name.toLowerCase().includes(query);
-      
-      const matchingBatches = (branch.batches || []).filter((batch: any) => 
-        batch.name.toLowerCase().includes(query) || 
-        (batch.timing && batch.timing.toLowerCase().includes(query)) ||
-        (batch.days && batch.days.toLowerCase().includes(query))
-      );
-
-      if (branchMatches) {
-        return branch;
-      } else if (matchingBatches.length > 0) {
-        return {
-          ...branch,
-          batches: matchingBatches
-        };
-      }
-      return null;
-    }).filter(Boolean);
-  }, [hierarchy, batchSearchQuery]);
 
   if (role === 'operator') {
     return (
