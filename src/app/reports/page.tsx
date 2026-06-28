@@ -194,7 +194,7 @@ export default function ReportsPage() {
     );
   }
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     // For the pending list, generate a real downloadable PDF and open it. A PDF file
     // opens in the phone's PDF viewer (reliable print/save), unlike window.print()
     // which fails on mobile ("There was a problem printing the page").
@@ -216,18 +216,29 @@ export default function ReportsPage() {
         return;
       }
 
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      if (!win) {
-        // Popup blocked — download the file directly instead.
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'Pending_Fees_List.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+      const file = new File([blob], 'Pending_Fees_List.pdf', { type: 'application/pdf' });
+      const nav: any = typeof navigator !== 'undefined' ? navigator : null;
+
+      // Mobile: native share sheet (Save to Files / WhatsApp / etc.) — reliable on phones.
+      if (nav?.canShare && nav.canShare({ files: [file] })) {
+        try {
+          await nav.share({ files: [file], title: 'Pending Fees List' });
+          return;
+        } catch (err: any) {
+          if (err && err.name === 'AbortError') return; // user cancelled
+          // otherwise fall through to download
+        }
       }
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      // Desktop / unsupported: download the PDF file directly.
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Pending_Fees_List.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
       return;
     }
     window.print();
