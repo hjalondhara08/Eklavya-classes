@@ -25,6 +25,7 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { formatDate, formatMonthOnly, parseDDMMYYYY, formatToDDMMYYYY } from '@/lib/utils/dates';
 import DatePickerInput from '@/components/ui/DatePickerInput';
 import { generateSimplePdf, PdfTextItem, PdfLineItem } from '@/lib/utils/pdf';
+import { buildReceiptImageBlob, preloadReceiptLogo } from '@/lib/utils/receiptImage';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Receipt helpers (module-level, pure)
@@ -338,6 +339,7 @@ export default function FeesPage() {
     if (!session) return;
     
     setTransactionDate(formatToDDMMYYYY(new Date().toISOString().split('T')[0]));
+    preloadReceiptLogo(); // warm the logo so the WhatsApp receipt image renders instantly
 
     fetch('/api/students?isActive=true', { cache: 'no-store' })
       .then(res => res.json())
@@ -553,25 +555,31 @@ export default function FeesPage() {
   //    text pre-filled, so the operator can attach the just-downloaded file.
   // `totals` is optional — passed from the receipt modal / student log (full ledger),
   // omitted from the Collection History quick-send.
+  // Generates the styled receipt as a PNG IMAGE (logo, ₹, colours — same look as the
+  // printed receipt) and hands it to WhatsApp:
+  //  • Mobile: native share sheet with the image attached → pick WhatsApp → chat → Send.
+  //  • Desktop / unsupported: downloads the image + opens the WhatsApp chat with text.
+  // `totals` is optional — passed from the receipt modal / student log (full ledger),
+  // omitted from the Collection History quick-send (figures default to 0 there).
   const shareReceipt = async (payment: any, history: any[], totals?: ReceiptTotals) => {
     const student = payment?.studentId || {};
-    const safeName = (student.name || 'Student').trim().replace(/\s+/g, '_');
-    const filename = `${safeName}_Fee_Receipt.pdf`;
+    const safeName = (student.name || 'Student').trim().replace(/\s+/g, '_') || 'Student';
+    const filename = `${safeName}_Fee_Receipt.png`;
+    const imgTotals = totals || { yearlyFee: 0, totalPaid: 0, remaining: 0 };
 
     let blob: Blob;
     try {
-      blob = buildReceiptPdfBlob(payment, history || [], totals);
+      blob = await buildReceiptImageBlob(payment, history || [], imgTotals);
     } catch (err) {
-      setMessage({ type: 'error', text: 'Could not generate the PDF receipt. Please try again.' });
+      setMessage({ type: 'error', text: 'Could not generate the receipt image. Please try again.' });
       return;
     }
 
     const text = buildWhatsAppMessage(payment, totals);
-    const file = new File([blob], filename, { type: 'application/pdf' });
+    const file = new File([blob], filename, { type: 'image/png' });
     const nav: any = typeof navigator !== 'undefined' ? navigator : null;
 
-    // Native share sheet (mobile) — must run within this click gesture, so the PDF
-    // is built synchronously above (no awaits before share()).
+    // Native share sheet (mobile).
     if (nav?.canShare && (nav.canShare({ files: [file], text }) || nav.canShare({ files: [file] }))) {
       try {
         const payload = nav.canShare({ files: [file], text })
@@ -585,7 +593,7 @@ export default function FeesPage() {
       }
     }
 
-    // Desktop fallback: download the PDF + open the WhatsApp chat with prefilled text.
+    // Desktop fallback: download the image + open the WhatsApp chat with prefilled text.
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -602,7 +610,7 @@ export default function FeesPage() {
     window.open(waUrl, '_blank');
     setMessage({
       type: 'success',
-      text: 'Receipt PDF downloaded and WhatsApp opened — attach the downloaded PDF to the chat and send.',
+      text: 'Receipt image downloaded and WhatsApp opened — attach the downloaded image to the chat and send.',
     });
   };
 

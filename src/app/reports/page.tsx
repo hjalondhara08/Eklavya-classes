@@ -14,10 +14,71 @@ import {
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatDate, formatMonthOnly, formatMonthNameOnly, parseDDMMYYYY, formatToDDMMYYYY } from '@/lib/utils/dates';
 import DatePickerInput from '@/components/ui/DatePickerInput';
+import { generatePagedPdf, PDF_PAGE_W, PDF_PAGE_H, PdfTextItem, PdfLineItem } from '@/lib/utils/pdf';
 
 type ReportTab = 'profit' | 'pending' | 'yearly-collection' | 'students';
 
 const STANDARDS = ['6', '7', '8', '9', '10', '11', '12'];
+
+// Builds a real, multi-page PDF of the pending-fees list. A downloadable file
+// is far more reliable than window.print() on phones (Android's web-print often
+// fails with "There was a problem printing the page").
+function buildPendingFeesPdf(students: any[], grandTotalDue: number, metaLine: string): Blob {
+  const LX = 36;
+  const RX = PDF_PAGE_W - 36;
+  const C = { idx: 36, name: 54, bb: 188, mob: 300, yearly: 372, paid: 442, pend: 508 };
+
+  const pages: Array<{ items: PdfTextItem[]; lines: PdfLineItem[] }> = [];
+  let items: PdfTextItem[] = [];
+  let lines: PdfLineItem[] = [];
+  let y = 0;
+
+  const flush = () => { if (items.length || lines.length) pages.push({ items, lines }); items = []; lines = []; };
+
+  const header = (first: boolean) => {
+    flush();
+    y = 40;
+    if (first) {
+      items.push({ text: 'EKLAVYA CLASSES', x: LX, y, size: 15, bold: true }); y += 18;
+      items.push({ text: 'Pending Fees / Dues List', x: LX, y, size: 11, bold: true }); y += 13;
+      items.push({ text: metaLine, x: LX, y, size: 8 }); y += 16;
+    } else {
+      items.push({ text: 'Pending Fees / Dues List (continued)', x: LX, y, size: 10, bold: true }); y += 16;
+    }
+    items.push({ text: '#', x: C.idx, y, size: 8, bold: true });
+    items.push({ text: 'Student', x: C.name, y, size: 8, bold: true });
+    items.push({ text: 'Branch / Batch', x: C.bb, y, size: 8, bold: true });
+    items.push({ text: 'Mobile', x: C.mob, y, size: 8, bold: true });
+    items.push({ text: 'Yearly', x: C.yearly, y, size: 8, bold: true });
+    items.push({ text: 'Paid', x: C.paid, y, size: 8, bold: true });
+    items.push({ text: 'Pending', x: C.pend, y, size: 8, bold: true });
+    y += 4;
+    lines.push({ x1: LX, y1: y, x2: RX, y2: y, width: 0.6 });
+    y += 12;
+  };
+
+  header(true);
+  students.forEach((s, i) => {
+    if (y > PDF_PAGE_H - 50) header(false);
+    items.push({ text: String(i + 1), x: C.idx, y, size: 8 });
+    items.push({ text: String(s.name || '').slice(0, 24), x: C.name, y, size: 8 });
+    items.push({ text: (String(s.branchName || '') + (s.batchName ? ' / ' + s.batchName : '')).slice(0, 22), x: C.bb, y, size: 7 });
+    items.push({ text: String(s.mobileNumber || s.parentMobile || '-').slice(0, 12), x: C.mob, y, size: 7 });
+    items.push({ text: formatCurrency(s.yearlyFees), x: C.yearly, y, size: 7 });
+    items.push({ text: formatCurrency(s.totalPaidAmount), x: C.paid, y, size: 7 });
+    items.push({ text: formatCurrency(s.pendingAmount), x: C.pend, y, size: 8, bold: true });
+    y += 13;
+  });
+
+  if (y > PDF_PAGE_H - 40) header(false);
+  y += 6;
+  lines.push({ x1: LX, y1: y - 10, x2: RX, y2: y - 10, width: 0.8 });
+  items.push({ text: 'Grand Total Outstanding:', x: C.bb, y, size: 9, bold: true });
+  items.push({ text: formatCurrency(grandTotalDue || 0), x: C.pend, y, size: 9, bold: true });
+  flush();
+
+  return generatePagedPdf(pages);
+}
 
 function getAcademicEndYear() {
   const today = new Date();
@@ -134,60 +195,39 @@ export default function ReportsPage() {
   }
 
   const handlePrint = () => {
-    // For the pending list, open a standalone printable document in a new tab and
-    // trigger the native print dialog (Save as PDF / Print). window.print() on the
-    // live page is unreliable on mobile, so this guarantees it works on phones too.
+    // For the pending list, generate a real downloadable PDF and open it. A PDF file
+    // opens in the phone's PDF viewer (reliable print/save), unlike window.print()
+    // which fails on mobile ("There was a problem printing the page").
     if (activeTab === 'pending' && data && Array.isArray(data.students)) {
-      const esc = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const branchLabel = selectedBranch ? (branches.find(b => b._id === selectedBranch)?.name || 'Branch') : 'All Branches';
-      const filterBits = [
-        `Branch: ${esc(branchLabel)}`,
-        selectedStandard ? `Std ${esc(selectedStandard)}` : '',
-        debouncedSearch ? `Search: "${esc(debouncedSearch)}"` : '',
-      ].filter(Boolean).join(' · ');
+      const metaLine = [
+        branchLabel,
+        selectedStandard ? `Std ${selectedStandard}` : '',
+        debouncedSearch ? `Search: "${debouncedSearch}"` : '',
+        `${data.students.length} student(s) with dues`,
+        `Generated: ${formatDate(new Date())}`,
+      ].filter(Boolean).join('  -  ');
 
-      const rows = data.students.map((s: any, i: number) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${esc(s.name)}</td>
-          <td>${esc(s.branchName || '')}${s.batchName ? ' / ' + esc(s.batchName) : ''}</td>
-          <td>${esc(s.mobileNumber || s.parentMobile || '-')}</td>
-          <td class="r">${esc(formatCurrency(s.yearlyFees))}</td>
-          <td class="r">${esc(formatCurrency(s.totalPaidAmount))}</td>
-          <td class="r due">${esc(formatCurrency(s.pendingAmount))}</td>
-        </tr>`).join('');
+      let blob: Blob;
+      try {
+        blob = buildPendingFeesPdf(data.students, data.grandTotalDue || 0, metaLine);
+      } catch (err) {
+        window.print();
+        return;
+      }
 
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <title>Pending_Fees_List</title>
-        <style>
-          *{box-sizing:border-box}
-          body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:20px}
-          h2{margin:0;color:#0d1b4b;font-size:18px}
-          .meta{font-size:12px;color:#555;margin:6px 0 14px}
-          table{width:100%;border-collapse:collapse;font-size:12px}
-          th,td{border:1px solid #cbd5e1;padding:7px 8px;text-align:left}
-          th{background:#f1f5f9;font-weight:700}
-          .r{text-align:right}
-          .due{font-weight:700;color:#b91c1c}
-          tfoot td{font-weight:700;background:#f8fafc}
-          @page{margin:12mm}
-        </style></head><body>
-        <h2>EKLAVYA CLASSES — Pending Fees / Dues List</h2>
-        <div class="meta">${filterBits} · ${data.students.length} student(s) with dues · Generated: ${esc(formatDate(new Date()))}</div>
-        <table>
-          <thead><tr><th>#</th><th>Student</th><th>Branch / Batch</th><th>Mobile</th><th class="r">Yearly</th><th class="r">Paid</th><th class="r">Pending</th></tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot><tr><td colspan="6" class="r">Grand Total Outstanding:</td><td class="r due">${esc(formatCurrency(data.grandTotalDue || 0))}</td></tr></tfoot>
-        </table>
-        <script>window.onload=function(){setTimeout(function(){try{window.focus();window.print();}catch(e){}},300);};</script>
-        </body></html>`;
-
-      const win = window.open('', '_blank');
-      if (!win) { window.print(); return; } // popup blocked — fall back
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (!win) {
+        // Popup blocked — download the file directly instead.
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Pending_Fees_List.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
       return;
     }
     window.print();
