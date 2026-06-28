@@ -1,0 +1,32 @@
+
+
+At report section pending and dues in fees is not workabable
+At report section yearly fee collection not work make it workable 
+
+
+anywhere fees status shown in monthly when select status to yearly than show yearly only
+
+in the operator section student information does not showing
+
+change date sturure to dd/mm/yyyy formate
+
+
+at pending fee section student all month fees pending fees like from joining date give all month name and total how many rupee fee is total payale and create system where any if fees is 6000 and parent give 4000 than it will automaticcally give change fee list to green to paid 6 month and than after two month if they give 2000 than all month fees is should complete 12 month and at fee section add education month from 01/05/2025 to 31/04/2026  
+
+
+the app is tution classes management so in this classes student will enroll at after six month of academic year so how to manage their fee structure like that student fees we cannot get into our profit and other side that stduent does not need to present in pending fee list so how to manage this otherwise we cannot get proper amount
+
+
+
+
+The core problem solved: A mid-year student like Arjun (joined December) has months June–November marked as N/A — they never appear as "due", never inflate your pending list, and never reduce your revenue figure. Your profit calculation only counts enrolled months.
+Three fee statuses for enrolled months:
+
+Paid — collected, counts in revenue
+Partial — half paid (for cases where student paid part of the month)
+Due — pending, shows in the pending tab
+
+Pending fees tab only shows students who have actual dues from their joining month onward — not N/A months, so your list stays clean and accurate.
+Revenue tab shows expected vs collected vs pending — expected is calculated only from enrolled months, so N/A months never distort your numbers.
+You
+
